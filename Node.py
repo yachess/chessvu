@@ -12,4 +12,5 @@ class Node(object):
     def promote(node):
         self.remove(node)
         self.children.push(node)
-
+if __name__ == "__main__":
+    print "test"
