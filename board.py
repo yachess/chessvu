@@ -150,13 +150,17 @@ class App(tk.Frame):
         return
 
     def first(self):
-        pass
+        try:
+            self.on_first_btn()
+        except AttributeError:
+            pass
+
     def last(self):
         try:
             self.on_last_btn()
         except AttributeError:
             pass
-        pass
+
     def prev(self):
         try:
             self.on_prev_btn()

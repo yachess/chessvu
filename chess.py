@@ -417,6 +417,27 @@ class Chess:
             pass
         return
 
+    def get_position(self):
+        return self.nodes[self.idx].pos
+
+    def first(self):
+        if self.idx > 0:
+            self.idx = 0
+            try:
+                self.on_nav(self.nodes[self.idx].pos.pos)
+            except AttributeError:
+                pass
+        return
+
+    def last(self):
+        if self.idx > 0:
+            self.idx = len(self.nodes)-1
+            try:
+                self.on_nav(self.nodes[self.idx].pos.pos)
+            except AttributeError:
+                pass
+        return
+
     def prev(self):
         print "prev button"
         if self.idx > 0:
@@ -443,6 +464,10 @@ class Chess:
             if m[0] == move[0] and m[1] == move[1]:
                 p2 = copy.deepcopy(pos)
                 move_type = p2.move(m)
+                
+                # Truncate moves
+                while len(self.nodes) > self.idx+1:
+                    del self.nodes[-1]
 
                 self.nodes.append(Node(p2))
                 self.idx += 1
