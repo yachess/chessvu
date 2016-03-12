@@ -86,7 +86,7 @@ class Position:
             self.crights00=[1, 1]
             self.crights000=[1, 1]
             self.t = 1  # 1:White's turn 0:Black's turn
-            self.mov_n = 1 # full move number
+            self.move_number = 1 # full move number
             self.ep_sq = -1  # en-passant square
             self.occ = [-1, -1, -1] #occupied map
         else:                       
@@ -95,7 +95,7 @@ class Position:
 #           self.crights00 = orig.crights00[:]
 #           self.crights000 = orig.crights000[:]
 #           self.t = orig.t
-#           self.mov_n = orig.mov_n
+#           self.move_number = orig.move_number
 #           self.ep_sq = orig.ep_sq
 #           self.occ = [-1, -1, -1]
             fs = fen.split()
@@ -127,7 +127,7 @@ class Position:
                 self.ep_sq = int(fs[3][1])*8+(ord(fs[3][0])-ord("a"))
             else: 
                 self.ep_sq = -1
-            self.mov_n = int(fs[5])
+            self.move_number = int(fs[5])
             self.occ = [-1, -1, -1]
 
     def __repr__(self):
@@ -136,7 +136,7 @@ class Position:
             st += self.pos[i]+" "
             if i%8==7:
                 st += "\n"
-        st += repr(self.mov_n) + "\n"
+        st += repr(self.move_number) + "\n"
         return st
 
     @staticmethod
@@ -384,7 +384,7 @@ class Position:
             move_type = "="+self.pos[dst]
 
         if self.t==Blk:
-            self.mov_n += 1
+            self.move_number += 1
         self.t ^= 1                 # Toggle color
         self.occ[0] = -1            # Invalidate occupied maps
 

@@ -9,6 +9,7 @@ oldy = -1
 drag_sq = -1
 
 
+
 class App(tk.Frame):
     def __init__(self, master=None):
         tk.Frame.__init__(self,master)
@@ -37,6 +38,19 @@ class App(tk.Frame):
         self.canvas.bind("<ButtonRelease-1>", self.mouse_release)
         self.canvas.bind("<B1-Motion>", self.mouse_move)
         self.bind("<Key>", self.key_press)        
+        self.flip = False
+
+    def coord_to_sq(self,coord):
+        sq = (coord[1] // tsize) * 8 + (coord[0] // tsize)
+        if self.flip:
+            sq = 63-sq
+        return sq
+
+    def sq_to_coord(self, sq):
+        if self.flip:
+            sq = 63-sq
+        return ((sq % 8) * tsize,(sq // 8) * tsize)
+
         
     def read_piece_image(self,pc, darker):
         path = "Data/PIECE/Dyche/"
@@ -92,7 +106,8 @@ class App(tk.Frame):
         Starts dragging piece if square is clicked """
         global drag_sq
         print "click at {0} {1}".format(event.x,event.y)
-        sq = (event.y // tsize) * 8 + event.x // tsize
+#       sq = (event.y // tsize) * 8 + event.x // tsize
+        sq = self.coord_to_sq((event.x, event.y))
         if sq in self.piece_objs:
             drag_sq = sq
             self.canvas.tag_raise(self.piece_objs[sq])
@@ -105,16 +120,18 @@ class App(tk.Frame):
         """
         global drag_sq
         if drag_sq != -1:
-            dst_sq = (event.y // tsize) * 8+ (event.x // tsize)
+#           dst_sq = (event.y // tsize) * 8+ (event.x // tsize)
+            dst_sq = self.coord_to_sq((event.x, event.y))
             if self.on_move_piece((drag_sq, dst_sq)):
                 self.move((drag_sq,dst_sq))        
             else:
                 # Withdraw the piece to original spot
                 print "not legal move"
                 obj = self.piece_objs[drag_sq]
+                
                 self.canvas.coords(obj, 
-                        ((drag_sq%8)*tsize, (drag_sq//8)*tsize))
-                pass
+                        self.sq_to_coord(drag_sq))
+#                       ((drag_sq%8)*tsize, (drag_sq//8)*tsize))
             drag_sq = -1
         return
 
@@ -157,10 +174,13 @@ class App(tk.Frame):
         pass
     def put(self,sq,p):         # Simply put piece on a square
         if p==" ": return
-        x = sq % 8; 
-        y = sq // 8
+#       x = sq % 8; 
+#       y = sq // 8
+        xy = self.sq_to_coord(sq)
         self.piece_objs[sq] = self.canvas.create_image(
-                x*tsize, y*tsize,
+#               x*tsize, y*tsize,
+                xy[0],
+                xy[1],
                 anchor=tk.NW, 
                 image=self.canvas.pc_imgs[p])
 
@@ -204,7 +224,8 @@ class App(tk.Frame):
 
         # Move
         self.canvas.coords(self.piece_objs[src],
-                ((dst % 8) * tsize,(dst // 8) * tsize))
+                self.sq_to_coord(dst))
+#               ((dst % 8) * tsize,(dst // 8) * tsize))
         self.piece_objs[dst] = self.piece_objs[src]
         del self.piece_objs[src]
         print "board:move"

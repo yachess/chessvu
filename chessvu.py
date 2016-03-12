@@ -54,5 +54,6 @@ for line in f:
 print len(dic)," games read"
 
 # setup board
+app.flip = True
 model.setup("rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2")
 app.mainloop()
