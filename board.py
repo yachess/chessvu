@@ -1,5 +1,6 @@
 from PIL import Image,ImageTk
 import Tkinter as tk
+import tkFileDialog
 
 tsize = 50
 padding = 2 # distance from edge of the time to edge of piece
@@ -22,6 +23,9 @@ class App(tk.Frame):
         self.last_btn = tk.Button(text=">|",command=self.last) 
         self.prev_btn = tk.Button(text="<",command=self.prev)
         self.next_btn = tk.Button(text=">", command=self.next)
+        self.prev_game_btn = tk.Button(text="prev",command=self.prev_game)
+        self.next_game_btn = tk.Button(text="next",command=self.next_game)
+        
         self.quit_btn = tk.Button(text="Quit",command=self.quit)
  #      self.prev_btn.grid(row = 1, column = 0)
  #      self.next_btn.grid(row = 1, column = 1)
@@ -30,7 +34,17 @@ class App(tk.Frame):
         self.prev_btn.pack(side=tk.LEFT)
         self.next_btn.pack(side=tk.LEFT)
         self.last_btn.pack(side=tk.LEFT)
+        self.prev_game_btn.pack(side=tk.LEFT)
+        self.next_game_btn.pack(side=tk.LEFT)
         self.quit_btn.pack(side=tk.LEFT)
+        
+        mb = tk.Menu(self.master)
+        self.master.config(menu=mb)
+    
+        filemenu = tk.Menu(mb)
+        filemenu.add_command(label = "Open",command = self.open_pgn)
+        filemenu.add_command(label = "Quit",command = self.quit)
+        mb.add_cascade(label="File",menu = filemenu)
 
         self.piece_objs = {}    # Canvas object indices of.piece_objs 
         
@@ -40,6 +54,16 @@ class App(tk.Frame):
         self.bind("<Key>", self.key_press)        
         self.flip = False
 
+    def open_pgn(self):
+        self.opt = opt = {}
+        opt["defaultextension"] = ".pgn"
+        opt["initialdir"] = "~"
+        opt['parent'] = 'root'
+        opt['title'] = 'Choose PGN file'
+        path = tkFileDialog.askopenfilename()
+        
+        self.on_open_pgn(path)
+        pass
     def coord_to_sq(self,coord):
         sq = (coord[1] // tsize) * 8 + (coord[0] // tsize)
         if self.flip:
@@ -173,6 +197,18 @@ class App(tk.Frame):
         except AttributeError:
             pass
 
+    def prev_game(self):
+        try:
+            self.on_prev_game_btn()
+        except AttributeError:
+            pass
+    
+    def next_game(self):
+        try:
+            self.on_next_game_btn()
+        except AttributeError:
+            pass
+
     def nav(self,dir):
         print "nav button"
         pass
@@ -197,7 +233,6 @@ class App(tk.Frame):
     # Public interfaces
     # pos_str can be either FEN or raw position data
     def setup(self,pos_str):
-        print "setting up:",pos_str
         # Remove images from board
 #       for val in self.piece_objs:
 #           self.canvas.delete(val)

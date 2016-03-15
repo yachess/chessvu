@@ -46,10 +46,10 @@ def pawn_attack_maps():
     for i in bp_atk:
         wp_atk.append(map(lambda x:63-x, i))
     wp_atk.reverse()
-    return [bp_atk,wp_atk]
+    return [bp_atk, wp_atk]
 
-# Returns night attack maps of 64 squares
 def knight_maps():
+    """ Returns night attack maps of 64 squares. """
     n_maps = [] 
     n_map_r = [-16+1,-8+2,8+2,16+1]     # Right side knight attack map
     n_map_l = map(lambda x:-x,n_map_r)  # Left side kngiht attack map
@@ -66,7 +66,6 @@ def knight_maps():
 
 class Position:
     """ Position class represents chess position """
-
     rays = directional_rays()
     p_atk_maps = pawn_attack_maps() 
     n_maps = knight_maps()
@@ -129,6 +128,7 @@ class Position:
                 self.ep_sq = -1
             self.move_number = int(fs[5])
             self.occ = [-1, -1, -1]
+
 
     def __repr__(self):
         st = ""
