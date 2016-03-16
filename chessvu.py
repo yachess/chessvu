@@ -14,6 +14,7 @@ def read_prev():
     g_idx-=1
     pf.read_into_model(g_idx,model)
     app.master.title(str(g_idx+1))
+
 def read_next():
     global g_idx, model, pf,app
     if g_idx > len(pf.games):

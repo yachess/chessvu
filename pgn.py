@@ -1,7 +1,15 @@
 import re
+import exceptions
+
 move_ptrn = "((([RNBQK]([a-h]|[1-8]|)|[a-h])(x|)|)[a-h][1-8]|O-O-O|O-O)"
 comment_ptrn = "\{[^\}]+\}"
 IPOS_FEN= "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkg _ 0 1"
+
+class PGN_Exception(exceptions.Exception):
+    def __init__(self,errno,msg):
+        self.args = (errno,msg)
+        self.errno = errno
+        self.errmsg = msg
 
 class PGN_File(object):
     
@@ -32,8 +40,21 @@ class PGN_File(object):
                 reading_body = True
 
     def parse_moves(self,body):
+#       body = re.sub(r"\([^\(\)]\)","",body)
+#       body = re.sub(r"\{[^\{\}]\}","",body)
+        
+        lvl=0
+        txt=""
+        for c in body:
+            if c == "(":
+                lvl+=1
+            elif c==")":
+                lvl-=1
+            else:
+                if lvl==0:
+                    txt += c
         r = re.compile(move_ptrn)
-        return r.findall(body) 
+        return r.findall(txt) 
 
     def read_into_model(self, idx, model):
         if idx < 0 or idx >= len(self.games):
@@ -117,6 +138,9 @@ class PGN_File(object):
                     handled = True
                     break
             if not handled:
-                print "not handled: "+m+" piece:" + str(piece) + " side:" +str(pos.t)
+                
+                raise PGN_Exception(1, "not handled: "+mv[0]+" piece:" + str(piece) + " side:" +str(pos.t))
                 break
+        model.idx = 0
+        
 
