@@ -1,22 +1,66 @@
 # Model class
+# Chess View
 
 import os
 import copy
+import traceback
 
-# for color table look up:`xfce4-terminal --color-table`
-
+# Constants
 Blk=0
 Wht=1
 
-R=0
-N=1
-B=2
-Q=3
-K=4
-P=5
+R = 0
+N = 1
+B = 2
+Q = 3
+K = 4
+P = 5
 
-UNCERTAIN=-1
+# Represent castling rights of Position.info
+CASTLE_BQ = 1 << 0
+CASTLE_BK = 1 << 1
+CASTLE_WQ = 1 << 2
+CASTLE_WK = 1 << 3
+REQ_UPDATE = 1 << 4  # set if update if needed
+
+UNCETAIN=-1
     
+
+MASK_TURN = 1 << 0  # if this bit is set it is white's turn
+MASK_P = 1 << 1
+MASK_N = 1 << 2
+MASK_B = 1 << 3
+MASK_R = 1 << 4
+MASK_Q = 1 << 5
+MASK_K = 1 << 6
+MASK_EP = 1 << 7
+
+MASK_CAPTURE_P = 1 << 8
+MASK_CAPTURE_N = 1 << 9
+MASK_CAPTURE_B = 1 << 10
+MASK_CAPTURE_R = 1 << 11
+MASK_CAPTURE_Q = 1 << 12
+MASK_CAPTURE_K = 1 << 13
+MASK_CAPTURE = MASK_CAPTURE_P | MASK_CAPTURE_N | MASK_CAPTURE_B | \
+            MASK_CAPTURE_R | MASK_CAPTURE_Q | MASK_CAPTURE_K
+
+MASK_CASTLE_SHORT = 1 << 14
+MASK_CASTLE_LONG = 1 << 15
+MASK_CASTLE = MASK_CASTLE_SHORT | MASK_CASTLE_LONG
+
+MASK_PROMOTE_N = 1 << 16
+MASK_PROMOTE_B = 1 << 17
+MASK_PROMOTE_R = 1 << 18
+MASK_PROMOTE_Q = 1 << 19
+
+MASK_PROMOTE = MASK_PROMOTE_N | MASK_PROMOTE_B | \
+        MASK_PROMOTE_R | MASK_PROMOTE_Q
+
+MASK_EN_PASSANT = 1 << 20
+MASK_CHECKING = 1 << 21
+MASK_CHECKMATING = 1 <<22
+
+# Methods to build commonly used maps
 # Returns directional rays of 64 squares
 def directional_rays():
     rays = []           # Three dimensional lists of directional rays.
@@ -49,7 +93,7 @@ def pawn_attack_maps():
     return [bp_atk, wp_atk]
 
 def knight_maps():
-    """ Returns night attack maps of 64 squares. """
+    """ Returns knight attack maps corresponding 64 squares. """
     n_maps = [] 
     n_map_r = [-16+1,-8+2,8+2,16+1]     # Right side knight attack map
     n_map_l = map(lambda x:-x,n_map_r)  # Left side kngiht attack map
@@ -63,6 +107,104 @@ def knight_maps():
         cnt += len(tl)
     print "n map size:",cnt
     return n_maps
+
+class Move:
+    """ this is extended move class. Normally simple move is presented by list of two number (source,destination)""" 
+    def __init__(self,src,dst):
+        self.number = 0
+        self.src = src
+        self.dst = dst
+        self.pgn = ""
+        self.info = 0L
+        self.comment = ""
+        pass
+    
+    def set_turn(self,is_white):
+        if is_white:
+            self.info |= MASK_TURN
+    
+    def set_captured_piece(self,cap_piece):
+        if cap_piece == 'P':
+            self.info |= MASK_CAPTURE_P
+        elif cap_piece == 'N':
+            self.info |= MASK_CAPTURE_N
+        elif cap_piece == 'B':
+            self.info |= MASK_CAPTURE_B
+        elif cap_piece == 'R':
+            self.info |= MASK_CAPTURE_R
+        elif cap_piece == 'Q':
+            self.info |= MASK_CAPTURE_Q
+        elif cap_piece == 'K':
+            self.info |= MASK_CAPTURE_K
+        else:
+            pass
+            #print "wrong capture:"+str(self.src)+"-"+str(self.dst)+":"+cap_piece
+            #traceback.print_exc(file=sys.stdout)
+
+
+    def set_castling(self,is_short):
+        if is_short:
+            self.info |= MASK_CASTLE_SHORT
+        else:
+            self.info |= MASK_CASTLE_LONG
+
+    def set_promotion_piece(self,pc):
+        if pc == 'N':
+            self.info |= MASK_PROMOTE_N
+        elif pc == 'B':
+            self.info |= MASK_PROMOTE_B
+        elif pc == 'R':
+            self.info |= MASK_PROMOTE_R
+        elif pc == 'Q':
+            self.info |= MASK_PROMOTE_Q
+
+    def get_promotion_piece(self):
+        if self.info & MASK_PROMOTE_N != 0:
+            return 'N'
+        elif self.info & MASK_PROMOTE_B != 0:
+            return 'B'
+        elif self.info & MASK_PROMOTE_R != 0:
+            return 'R'
+        elif self.info & MASK_PROMOTE_Q != 0:
+            return 'Q'
+        print "wrong promotion piece"
+        return None
+
+    def set_en_passant(self):
+        self.info |= MASK_EN_PASSANT
+        self.info |= MASK_CAPTURE_P
+
+    def set_checking(self):
+        self.info |= MASK_CHECKING
+
+    def set_checkmating(self):
+        self.info |= MASK_CHECKMATING    
+    
+    def is_white(self):
+        return (self.info & MASK_TURN != 0)
+
+    def is_black(self):
+        return (self.info % MASK_TURN == 0)
+
+    def is_capture(self):
+        return (self.info & MASK_CAPTURE != 0)
+
+    def is_en_passant(self):
+        return (self.info & MASK_EN_PASSANT != 0)
+
+    def is_promotion(self):
+        return (self.info & MASK_PROMOTE != 0)
+
+    def is_castling_short(self):
+        return (self.info & MASK_CASTLE_SHORT != 0)
+
+    def is_castling_long(self):
+        return (self.info & MASK_CASTLE_LONG != 0)
+    def is_checking(self):
+
+        return (self.info & MASK_CHECKING)
+    def is_checkmating(self):
+        return (self.info & MASK_CHECKMATING)
 
 class Position:
     """ Position class represents chess position """
@@ -88,6 +230,7 @@ class Position:
             self.move_number = 1 # full move number
             self.ep_sq = -1  # en-passant square
             self.occ = [-1, -1, -1] #occupied map
+            self.last_move = None
         else:                       
             #initialize with fen
 #           self.pos = copy.deepcopy(orig.pos)
@@ -114,7 +257,7 @@ class Position:
             self.crights000=[0, 0]
             for c in fs[2]:
                 if c == "K":
-                    self.crights00[Wht]=1
+                    self.crights00[Wht] = 1
                 elif c == "Q":
                     self.crights000[Wht] = 1
                 elif c == "k":
@@ -128,7 +271,6 @@ class Position:
                 self.ep_sq = -1
             self.move_number = int(fs[5])
             self.occ = [-1, -1, -1]
-
 
     def __repr__(self):
         st = ""
@@ -172,25 +314,175 @@ class Position:
             if i%8==7:
                 print ""
 
-    def calc_occ(self):
-        if self.occ[0] != -1: return
+    def get_legal_moves(self):
+        # Get my moves
+        mvs = self._get_moves(self.t)
 
-        self.occ[Blk]=0L
-        self.occ[Wht]=0L
+        # Get a attaking map by foe
+        foe_mvs = self._get_moves(self.t^1)
+        foe_attk = 0L
+        for atk in foe_mvs:
+            foe_attk |= 1L << atk[1]
 
-        # Calculate occupied map 
-        # first assume black's move then swap if it's white's
-        for piece in enumerate(self.pos):
-            if piece[1].islower():
-                self.occ[Blk] |= 1 << piece[0]
-            elif piece[1].isupper():
-                self.occ[Wht] |= 1 << piece[0]
-        return
+        # Add castling moves
+        all_occ = self.occ[Blk] | self.occ[Wht]
+        king_sqs=[4,60]
+        if self.crights00[self.t] \
+            and not (all_occ & (1L<<king_sqs[self.t]+1| 
+                1L<<king_sqs[self.t]+2)) \
+            and not (foe_attk & (1L<<king_sqs[self.t]| 
+                1L<<king_sqs[self.t]+1|
+                1L<<king_sqs[self.t]+2)):
+            mvs.append((king_sqs[self.t],king_sqs[self.t]+2))
+        if self.crights000[self.t] \
+            and not (all_occ & (1L<<king_sqs[self.t]-1| 
+                1L<<king_sqs[self.t]-2| \
+                1L<<king_sqs[self.t]-3)) \
+            and not (foe_attk & (1L<<king_sqs[self.t]|
+                1L<<king_sqs[self.t]-1| 
+                1L<<king_sqs[self.t]-2)):
+            mvs.append((king_sqs[self.t],king_sqs[self.t]-2))
 
-    def get_moves(self,side):
-        """ get all moves """
+        # Return only non-self-checking moves
+        return filter(self.king_safe_after, mvs)    
+    
+    # Returns true if the square isn't attacked after given move
+    def king_safe_after(self, mv):
+        new_p = copy.deepcopy(self)
+        #turn off pgn encoding temproarily.
+        new_p.move(mv)
+        
+        # check if king is in check in new position
+        king_c = "k" if self.t==0 else "K"
+        king_sq = "".join(new_p.pos).find(king_c)
+        mvs = new_p._get_moves(new_p.t)
+        for m in mvs:
+            if m[1]==king_sq:
+                return False
+        return True
+
+#   def king_in_check(self,k_color):
+#       king_c = "k" if k_color==Blk else "K"
+#       king_sq = "".join(self.pos).find(king_c)
+#       if king_sq == -1: 
+#           return False
+#       mvs = self.get_legal_moves()
+#       print "king at:"+str(king_sq)
+#       for m in mvs:
+#           if m[1]==king_sq:
+#               print "king attacked"
+#               return True
+#       return False
+
+    def move(self,mv):
+        """  Make a move: caller is responsible for checking legality.
+        handles promotion, en-passant, capture and castling and pgn encoding """
+
+        assert mv[0]>=0 and mv[0]<64 \
+            and mv[1]>=0 and mv[1]<64
+        src = mv[0]
+        dst = mv[1]
+        src_p = self.pos[src]
+        dst_p = self.pos[dst]
+        self.pos[dst] = self.pos[src]
+        self.pos[src] = " "
+
+        move = Move(src,dst)
+        move.number = self.move_number
+#       print "move:"+str(src) + "-" + str(dst)
+
+        if src_p.islower():
+            move.set_turn(Blk)  #  0 is black 1 is white
+        else:
+            move.set_turn(Wht)
+
+        # En passant capture
+        if src_p == "p" and dst == self.ep_sq:
+            self.pos[dst-8] = " "
+            move.set_en_passant()
+        elif src_p == "P" and dst == self.ep_sq:
+            self.pos[dst+8] = " "
+            move.set_en_passant()
+        elif dst_p != ' ':
+            move.set_captured_piece(dst_p.upper())
+
+        # Set enpassant square
+        if src_p == "p" and dst-src == 16:
+            self.ep_sq = src + 8
+        elif src_p == "P" and src-dst == 16:
+            self.ep_sq = src - 8
+        else:  # Clear enpassant square
+            self.ep_sq = -1    
+
+        # Move rooks if castling
+        if src_p == "k" and src==4 and dst == 2:
+            self.pos[0]=" "
+            self.pos[3]="r"
+            move.set_castling(False)  # false: long castling  true: short castling
+            self.crights000[Blk] = False
+        elif src_p == "k" and src ==4 and dst == 6:
+            self.pos[7] = " "
+            self.pos[5] = "r"
+            move.set_castling(True)
+            self.crights00[Blk] = False
+        elif src_p == "K" and src==60 and dst == 58:
+            self.pos[56] = " "
+            self.pos[59] = "R"
+            move.set_castling(False)
+            self.crights000[Wht] = False
+        elif src_p == "K" and src==60 and dst == 62:
+            self.pos[63] = " "
+            self.pos[61] = "R"
+            move.set_castling(True)
+            self.crights00[Wht] = False
+
+        # If king or rook moves void castling rights
+        if src_p == "k":
+            self.crights000[Blk] = False
+            self.crights00[Blk] = False
+        elif src_p == "K":
+            self.crights000[Wht] = False
+            self.crights00[Wht] = False
+        if  src_p == "r" and src == 0 and self.crights000[Blk]:
+            self.crights000[Blk] = False
+        elif src_p == "r" and src == 7 and self.crights00[Blk]:
+            self.crights00[Blk] = False
+        if  src_p == "R" and src == 56 and self.crights000[Wht]:
+            self.crights000[Wht] = False
+        elif src_p == "R" and src == 63 and self.crights00[Wht]:
+            self.crights00[Wht] = False
+
+        # Promotion
+        if (src_p == "p" and dst//8 == 7) or \
+                (src_p == "P" and dst//8 == 0) :
+            try:
+                self.pos[dst] = self.on_ask_promotion(src_p == "P")
+            except AttributeError:
+                self.pos[dst] = "q"
+                if src_p == "P": self.pos[dst] = "Q"
+            move.set_promotion_piece(self.pos[dst].upper())
+
+        if self.t==Blk:
+            self.move_number += 1
+        self.t ^= 1                 # Toggle color
+        self.occ[0] = -1            # Invalidate occupied maps to recalculate
+
+        return move
+
+    def _get_moves(self,side):
+        """ get all moves of side regardless of checked king"""
         mvs = []
-        self.calc_occ()
+
+        # calculate occupied map """
+        if self.occ[0] == -1:
+            self.occ[Blk]=0L
+            self.occ[Wht]=0L
+            # first assume black's move then swap if it's white's
+            for piece in enumerate(self.pos):
+                if piece[1] in "rnbqkp":
+                    self.occ[Blk] |= 1 << piece[0]
+                elif piece[1] in "RNBQKP":
+                    self.occ[Wht] |= 1 << piece[0]
        
         pieces = ["rnbqkp","RNBQKP"]
         all_occ = self.occ[Blk] | self.occ[Wht]
@@ -259,148 +551,16 @@ class Position:
         return mvs            
     
 
-    def get_legal_moves(self):
-        # Get my moves
-        mvs = self.get_moves(self.t)
-
-        # Get a attaking map by foe
-        foe_mvs = self.get_moves(self.t^1)
-        foe_attk = 0L
-        for atk in foe_mvs:
-            foe_attk |= 1L << atk[1]
-
-        # Add castling moves
-        all_occ = self.occ[Blk] | self.occ[Wht]
-        king_sqs=[4,60]
-        if self.crights00[self.t] \
-            and not (all_occ & (1L<<king_sqs[self.t]+1| 
-                1L<<king_sqs[self.t]+2)) \
-            and not (foe_attk & (1L<<king_sqs[self.t]| 
-                1L<<king_sqs[self.t]+1|
-                1L<<king_sqs[self.t]+2)):
-            mvs.append((king_sqs[self.t],king_sqs[self.t]+2))
-        if self.crights000[self.t] \
-            and not (all_occ & (1L<<king_sqs[self.t]-1| 
-                1L<<king_sqs[self.t]-2| \
-                1L<<king_sqs[self.t]-3)) \
-            and not (foe_attk & (1L<<king_sqs[self.t]|
-                1L<<king_sqs[self.t]-1| 
-                1L<<king_sqs[self.t]-2)):
-            mvs.append((king_sqs[self.t],king_sqs[self.t]-2))
-
-
-        # Return only non-self-checking moves
-        return filter(self.king_safe_after, mvs)    
-    
-    # Returns true if the square isn't attacked after given move
-    def king_safe_after(self, move):
-        np = copy.deepcopy(self)
-        np.move(move)
-
-        king_c = "k" if self.t==0 else "K"
-        king_sq = "".join(np.pos).find(king_c)
-        # check king is in check
-        mvs = np.get_moves(np.t)
-        for m in mvs:
-            if m[1]==king_sq:
-                return False
-        return True
-
-    # Make a move: caller is responsible for legality.
-    # handles promotion, en-passant, capture and castling
-    def move(self,mv):
-        move_type = ""
-        assert mv[0]>=0 and mv[0]<64 \
-            and mv[1]>=0 and mv[1]<64
-        src = mv[0]
-        dst = mv[1]
-        src_p = self.pos[src]
-        dst_p = self.pos[dst]
-        self.pos[dst] = self.pos[src]
-        self.pos[src] = " "
-
-        # En passant capture
-        if src_p == "p" and dst == self.ep_sq:
-            self.pos[dst-8] = " "
-            move_type = "epc"
-        elif src_p == "P" and dst == self.ep_sq:
-            self.pos[dst+8] = " "
-            move_type = "EPC"
-
-        # Set enpassant square
-        if src_p == "p" and dst-src == 16:
-            self.ep_sq = src + 8
-        elif src_p == "P" and src-dst == 16:
-            self.ep_sq = src - 8
-        else:  # Clear enpassant square
-            self.ep_sq = -1    
-
-        # Move rooks if castling
-        if src_p == "k" and src==4 and dst == 2:
-            self.pos[0]=" "
-            self.pos[3]="r"
-            move_type = "ooo"
-            self.crights000[Blk] = False
-        elif src_p == "k" and src ==4 and dst == 6:
-            self.pos[7] = " "
-            self.pos[5] = "r"
-            move_type = "oo"
-            self.crights00[Blk] = False
-        elif src_p == "K" and src==60 and dst == 58:
-            self.pos[56] = " "
-            self.pos[59] = "R"
-            move_type = "OOO"
-            self.crights000[Wht] = False
-        elif src_p == "K" and src==60 and dst == 62:
-            self.pos[63] = " "
-            self.pos[61] = "R"
-            move_type = "OO"
-            self.crights00[Wht] = False
-
-        # If king or rook moves void castling rights
-        if src_p == "k":
-            self.crights000[Blk] = False
-            self.crights00[Blk] = False
-        elif src_p == "K":
-            self.crights000[Wht] = False
-            self.crights00[Wht] = False
-        if  src_p == "r" and src == 0 and self.crights000[Blk]:
-            self.crights000[Blk] = False
-        elif src_p == "r" and src == 7 and self.crights00[Blk]:
-            self.crights00[Blk] = False
-        if  src_p == "R" and src == 56 and self.crights000[Wht]:
-            self.crights000[Wht] = False
-        elif src_p == "R" and src == 63 and self.crights00[Wht]:
-            self.crights00[Wht] = False
-
-        # Promotion
-        if (src_p == "p" and dst//8 == 7) or \
-                (src_p == "P" and dst//8 == 0) :
-            try:
-                self.pos[dst] = self.on_get_promotion(src_p == "P")
-            except AttributeError:
-                self.pos[dst] = "q"
-                if src_p == "P": self.pos[dst] = "Q"
-            move_type = "="+self.pos[dst]
-
-        if self.t==Blk:
-            self.move_number += 1
-        self.t ^= 1                 # Toggle color
-        self.occ[0] = -1            # Invalidate occupied maps
-
-#       print self
-        return move_type
-
 class Node:
     def __init__(self, pos = None):
         self.pos = pos
         return
 
 class Chess:
-    """ Manages Position """
+    """ Manages tree of positions """
     def __init__(self):
         self.nodes = []
-        self.idx=-1
+        self.idx= -1
         return
 
     # Initialize data as default chess model
@@ -460,25 +620,102 @@ class Chess:
     def make(self, move):
         pos = self.nodes[self.idx].pos
         legal_moves = pos.get_legal_moves()
+
+
         for m in legal_moves:
             if m[0] == move[0] and m[1] == move[1]:
-                p2 = copy.deepcopy(pos)
-                move_type = p2.move(m)
-                
+                next_position = copy.deepcopy(pos)
+                last_move = next_position.move(m)
+
+
+                encode_pgn(pos,legal_moves,next_position,last_move)    
                 # Truncate moves
                 while len(self.nodes) > self.idx+1:
                     del self.nodes[-1]
 
-                self.nodes.append(Node(p2))
+
+                next_position.last_move = last_move
+                 
+                self.nodes.append(Node(next_position))
                 self.idx += 1
 
                 try:
-                    self.on_make(m, move_type)
+                    self.on_make(last_move)
                 except AttributeError:
                     pass
                 return True
         return False
 
+
+
+def encode_pgn(pos,lmvs,new_pos,move):
+    # encode pgn 
+    src_p = pos.pos[move.src]
+    dst_p = pos.pos[move.dst]
+
+    src_written = False
+    move.pgn = ""
+    if move.is_castling_short():
+        move.pgn = "O-O"
+    elif move.is_castling_long():
+        move.pgn = "O-O-O"
+    else:
+        is_pawn_move = src_p.upper() == 'P'
+        is_capture = move.is_capture()
+        sqr_conflict = False
+        if is_pawn_move and  is_capture:
+            move.pgn += chr(ord('a')+ (move.src % 8))
+            src_written = True
+        elif not is_pawn_move:
+            move.pgn += src_p.upper()
+        #check if source square is ambiguos
+        if not src_written:
+            for mv in lmvs:
+                if mv[1] == move.dst:
+                    if mv[0] == move.src: # desregard same move
+                        continue
+                    elif pos.pos[mv[0]] == src_p:
+                        if (move.src % 8 == mv[0] % 8): # file is same
+                            move.pgn += str(8-move.src // 8)
+                        else:
+                            move.pgn += chr(ord('a') + (move.src % 8))
+                        break
+        if is_capture:
+            move.pgn += 'x'
+
+        #dest sq
+        move.pgn += chr(ord('a') + (move.dst % 8))
+        move.pgn += str(8 - move.dst // 8)
+
+        #if promotion add promotion notation
+        if move.is_promotion():
+            move.pgn += '='
+            move.pgn += move.get_promotion_piece()
+    #if check add check notation
+#   if new_pos.king_in_check(0 if pos.t == 1 else 1 ): 
+                
+    #check if opponent king is to be checked
+    attk = 0L  # attack map
+    check = False
+    t = 1 if move.is_white() else 0
+    mvs = new_pos._get_moves(t)
+    for m in mvs:
+        attk |= 1 << m[1]
+    op_king_sq = "".join(new_pos.pos).find("K" if t==0 else "k")
+    
+    #find if opponent king is checked or checkmated
+    if op_king_sq != -1 and attk & 1 << op_king_sq:
+        foe_mvs = new_pos.get_legal_moves()
+        if len(foe_mvs) == 0:
+            move.set_checkmating()
+            move.pgn += '#'
+        else:
+            move.set_checking()
+            move.pgn += '+'
+        
+#   print "encode:"+str(move.number)+(". " if move.is_white() else "... ") +move.pgn
+
+       
 # Test unit
 def print_coords():
     for i in range(64):

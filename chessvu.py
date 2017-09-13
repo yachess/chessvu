@@ -4,37 +4,58 @@ import chess
 import board
 import pgn
 
-board.tsize = 45
-g_idx = 0
+board.sq_size = 72
+
+#game index in pgn file  -1 means it is not from pgn file
 
 def read_prev():
-    global g_idx, model, pf,app
-    if g_idx <=0:
+    global  model, pf, app
+    if pf.g_idx <=0:
         return
-    g_idx-=1
-    pf.read_into_model(g_idx,model)
-    app.master.title(str(g_idx+1))
+    pf.read_into_model(pf.g_idx-1,model)
+    app.master.title(pf.title())
 
 def read_next():
-    global g_idx, model, pf,app
-    if g_idx > len(pf.games):
+    global model, pf,app
+    if pf.g_idx > len(pf.games):
         return
-    g_idx+=1
-    pf.read_into_model(g_idx,model)
-    app.master.title(str(g_idx+1))
+    pf.read_into_model(pf.g_idx+1,model)
+    app.master.title(pf.title())
 
 def open_pgn(filename):
-    global pf,g_idx,model
-    g_idx=0
+    global pf,model,app
     pf = pgn.PGN_File(filename)
-    pf.read_into_model(g_idx,model)
+    pf.read_into_model(0,model)
+    app.master.title(pf.title())
+    
+def leftkey(e):
+    ctrl = (e.state & 0x4) != 0
+    if ctrl:
+        read_prev()
+    else:
+        model.prev()
+
+def rightkey(e):
+    ctrl = (e.state & 0x4) != 0
+    if ctrl:
+        read_next()
+    else:
+        model.next()
+        move = model.nodes[model.idx].pos.last_move
+        print str(move.number)+(". " if move.is_white() else "... ") +move.pgn
+def rotatekey(e):
+    ctrl = (e.state & 0x4) != 0
+    if ctrl:
+        app.rotate_board()
+
 # Create View and Model
 app = board.App()
-model = chess.Chess()
+#app.setup("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
 
-# Bind event handlers
+model = chess.Chess()
+# Wire event handlers
 app.on_move_piece  = model.make
-model.on_get_promotion = app.get_promotion
+model.on_ask_promotion = app.ask_promotion
 model.on_setup = app.setup
 model.on_make = app.handle_make
 app.on_prev_btn = model.prev
@@ -43,8 +64,14 @@ app.on_first_btn = model.first
 app.on_last_btn = model.last
 app.on_prev_game_btn = read_prev
 app.on_next_game_btn = read_next
+
+app.master.bind('<Left>',leftkey)
+app.master.bind('<Right>',rightkey)
+app.master.bind('r',rotatekey)
+
 app.on_open_pgn = open_pgn
 model.on_nav = app.setup
 
 app.master.title("Chessvu")
 app.mainloop()
+

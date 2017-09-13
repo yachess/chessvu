@@ -1,22 +1,23 @@
+# board.py
+# Graphical representation of chess board
+
+
 from PIL import Image,ImageTk
 import Tkinter as tk
 import tkFileDialog
 
-tsize = 50
 padding = 2 # distance from edge of the time to edge of piece
 
 oldx = -1
 oldy = -1
 drag_sq = -1
 
-
-
 class App(tk.Frame):
     def __init__(self, master=None):
         tk.Frame.__init__(self,master)
         self.pack()
-        self.master.geometry("%dx%d"%(tsize*8+2, tsize*8+20))
-        self.canvas = tk.Canvas(self, width=tsize*8, height=tsize*8)
+        self.master.geometry("%dx%d"%(sq_size*8+2, sq_size*8+20))
+        self.canvas = tk.Canvas(self, width=sq_size*8, height=sq_size*8)
         self.create_widgets()
        
         self.first_btn = tk.Button(text="|<",command=self.first)
@@ -26,6 +27,7 @@ class App(tk.Frame):
         self.prev_game_btn = tk.Button(text="prev",command=self.prev_game)
         self.next_game_btn = tk.Button(text="next",command=self.next_game)
         
+        self.revert_btn = tk.Button(text="Revert",command=self.revert)
         self.quit_btn = tk.Button(text="Quit",command=self.quit)
  #      self.prev_btn.grid(row = 1, column = 0)
  #      self.next_btn.grid(row = 1, column = 1)
@@ -36,6 +38,7 @@ class App(tk.Frame):
         self.last_btn.pack(side=tk.LEFT)
         self.prev_game_btn.pack(side=tk.LEFT)
         self.next_game_btn.pack(side=tk.LEFT)
+        self.revert_btn.pack(side=tk.LEFT)
         self.quit_btn.pack(side=tk.LEFT)
         
         mb = tk.Menu(self.master)
@@ -51,8 +54,8 @@ class App(tk.Frame):
         self.canvas.bind("<Button-1>", self.mouse_click)
         self.canvas.bind("<ButtonRelease-1>", self.mouse_release)
         self.canvas.bind("<B1-Motion>", self.mouse_move)
-        self.bind("<Key>", self.key_press)        
-        self.flip = False
+#       self.bind("<Key>", self.key_press)        
+        self.rotate = False
 
     def open_pgn(self):
         self.opt = opt = {}
@@ -64,22 +67,23 @@ class App(tk.Frame):
         
         self.on_open_pgn(path)
         pass
+
     def coord_to_sq(self,coord):
-        sq = (coord[1] // tsize) * 8 + (coord[0] // tsize)
-        if self.flip:
+        sq = (coord[1] // sq_size) * 8 + (coord[0] // sq_size)
+        if self.rotate:
             sq = 63-sq
         return sq
 
     def sq_to_coord(self, sq):
-        if self.flip:
+        if self.rotate:
             sq = 63-sq
-        return ((sq % 8) * tsize,(sq // 8) * tsize)
+        return ((sq % 8) * sq_size,(sq // 8) * sq_size)
 
         
     def read_piece_image(self,pc, darker):
         path = "Data/PIECE/Dyche/"
         image = Image.open(path+pc+".png")
-        image = image.resize((tsize,tsize), Image.ANTIALIAS)
+        image = image.resize((sq_size,sq_size), Image.ANTIALIAS)
         if darker: image = self.darker_image(image)
         img = ImageTk.PhotoImage(image)
         return img
@@ -89,12 +93,12 @@ class App(tk.Frame):
         pxls = img.load()
         for i in range(img.size[0]):
             for j in range(img.size[1]):
-                alpha = 0.5
+                alpha = 0.7   # 0..1 :  0 is darkest
                 beta = -30
                 pxls[i,j] = (
-                        int(pxls[i,j][0]*alpha + beta),
-                        int(pxls[i,j][1]*alpha + beta),
-                        int(pxls[i,j][2]*alpha + beta),
+                        int(pxls[i,j][0] * alpha + beta),
+                        int(pxls[i,j][1] * alpha + beta),
+                        int(pxls[i,j][2] * alpha + beta),
                         pxls[i,j][3])
         return img
 
@@ -105,32 +109,32 @@ class App(tk.Frame):
             x=sq%8
             y=sq//8
             color="#00A040" if (x+y)%2 == 1 else "#00D015" 
-            sq = self.canvas.create_rectangle(x*tsize, y*tsize,
-                    (x*tsize+tsize,y*tsize+tsize), fill = color)
+            sq = self.canvas.create_rectangle(
+                    x * sq_size, 
+                    y * sq_size,
+                    (x * sq_size + sq_size, y * sq_size + sq_size), 
+                    fill = color)
             self.canvas.squares.append(sq)
 
-        # Read piece picture
+        # Read piece picture (dictionary:keys are r,n,b,q,k,p,R,N,B,Q,K)
         pc_names = ["R","N","B","Q","K","P"]
         pc_imgs = {}
         for i in pc_names:
             pc_imgs[i] = self.read_piece_image(i,False)
 
         #create darker images for black
-        for i in pc_names:
-            pc_imgs[i.lower()] = self.read_piece_image(i, True)
+        for pn in pc_names:
+            pc_imgs[pn.lower()] = self.read_piece_image(pn, True)
       
-        #self.canvas.create_image(0,0,anchor=tk.NW,image=pc_imgs["p"])
-        print "%d pictures"%(len(pc_imgs))
         self.canvas.pc_imgs = pc_imgs
-#       self.canvas.grid(row = 0,column = 1,sticky="w"+"e"+"n"+"w")
         self.canvas.pack()
 
     def mouse_click(self,event):
         """ Called when user mouse click,
         Starts dragging piece if square is clicked """
         global drag_sq
-        print "click at {0} {1}".format(event.x,event.y)
-#       sq = (event.y // tsize) * 8 + event.x // tsize
+#       print "click at {0} {1}".format(event.x,event.y)
+#       sq = (event.y // sq_size) * 8 + event.x // sq_size
         sq = self.coord_to_sq((event.x, event.y))
         if sq in self.piece_objs:
             drag_sq = sq
@@ -144,7 +148,7 @@ class App(tk.Frame):
         """
         global drag_sq
         if drag_sq != -1:
-#           dst_sq = (event.y // tsize) * 8+ (event.x // tsize)
+#           dst_sq = (event.y // sq_size) * 8+ (event.x // sq_size)
             dst_sq = self.coord_to_sq((event.x, event.y))
             if self.on_move_piece((drag_sq, dst_sq)):
                 self.move((drag_sq,dst_sq))        
@@ -155,7 +159,7 @@ class App(tk.Frame):
                 
                 self.canvas.coords(obj, 
                         self.sq_to_coord(drag_sq))
-#                       ((drag_sq%8)*tsize, (drag_sq//8)*tsize))
+#                       ((drag_sq%8)*sq_size, (drag_sq//8)*sq_size))
             drag_sq = -1
         return
 
@@ -164,7 +168,7 @@ class App(tk.Frame):
         if drag_sq == -1: return
 #       print "move by {0} {1}".format(event.x-oldx, event.y-oldy)
         obj = self.piece_objs[drag_sq]
-        self.canvas.coords(obj, (event.x-tsize//2, event.y-tsize//2))
+        self.canvas.coords(obj, (event.x-sq_size//2, event.y-sq_size//2))
         oldx = event.x 
         oldy = event.y
         return
@@ -212,13 +216,11 @@ class App(tk.Frame):
     def nav(self,dir):
         print "nav button"
         pass
+    
     def put(self,sq,p):         # Simply put piece on a square
         if p==" ": return
-#       x = sq % 8; 
-#       y = sq // 8
         xy = self.sq_to_coord(sq)
         self.piece_objs[sq] = self.canvas.create_image(
-#               x*tsize, y*tsize,
                 xy[0],
                 xy[1],
                 anchor=tk.NW, 
@@ -264,36 +266,50 @@ class App(tk.Frame):
         # Move
         self.canvas.coords(self.piece_objs[src],
                 self.sq_to_coord(dst))
-#               ((dst % 8) * tsize,(dst // 8) * tsize))
+#               ((dst % 8) * sq_size,(dst // 8) * sq_size))
         self.piece_objs[dst] = self.piece_objs[src]
         del self.piece_objs[src]
         print "board:move"
 
     # Post process after make move
     # Note that this method is called before board:move
-    def handle_make(self, mv, mtype):
+    def handle_make(self, move):
         # Delete enpassant capture
-        if mtype == "EPC":
-            self.remove(mv[1] + 8)
-        elif mtype == "epc":
-            self.remove(mv[1] - 8)
-        elif mtype == "OO":
+        if move.is_en_passant():
+            self.remove(move.dst + (8 if move.is_white() else -8))
+        elif move.is_short_castling() and move.is_white():
             self.move((63,61))
-        elif mtype == "OOO":
+        elif move.is_long_castling() and move.is_white():
             self.move((56, 59))
-        elif mtype == "oo":
+        elif move.is_short_castling() and move.is_black():
             self.move((7, 5))
-        elif mtype == "ooo":
+        elif move.is_long_castling() and move.is_black():
             self.move((0, 3))
-        elif mtype != "" and mtype[0] == "=":
-            # replace srs_sq piece (piece isn't moved yet)
-            self.remove(mv[0])
-            self.put(mv[0],mtype[1])
-        print "board:handle_make ", mtype
+        elif move.is_promotion():
+            # replace srs_sq piece (since piece hsn't moved yet we use source square)
+            self.remove(move.src)
+            pc = move.get_promotion_piece()
+            if move.is_black():
+                pc = pc.lower()
+            self.put(move.src,pc)
+#       print "board:handle_make ", mtype
     
-    def get_promotion(self,side):
+    def ask_promotion(self,side):
         if side==1: return "Q"
         return "q"
+
+    def rotate_board(self):
+        # rotate pieces individually
+        for src in range(64):
+            if src in self.piece_objs:
+                dst = 63-src 
+                self.canvas.coords(self.piece_objs[src],
+                        self.sq_to_coord(dst))
+        self.rotate = not self.rotate
+
+    def revert(self):
+        print "revert"
+
 
 if __name__ == "__main__":
     app = App(tk.Tk())
