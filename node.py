@@ -9,22 +9,43 @@ class Node:
     def is_leaf(self):
         return len(self.childs) == 0
 
-    def append(self,node):
-        self.childs.append(node)
-        node.parent = self
+    @classmethod
+    def clear(cls):
+        Node.cur_node = None
 
-    def remove(self,node):
-        childs.remove(node)
+    @classmethod
+    def append(cls, node):
+        if Node.cur_node == None:
+            Node.cur_node = node
+            node.parent = None
+            node.childs = []
+        else:
+            Node.cur_node.childs.append(node)
+            node.parent = Node.cur_node
+            Node.cur_node = node
+
+    @classmethod
+    def remove(cls):
+        
+        node = Node.cur_node 
+        Node.cur_node = Node.cur_node.parent
+        
+        if Node.cur_node :
+            Node.cur_node.childs.remove(node)
+
         node.parent = None
 
-    @staticmethod
-    def forward():
+    @classmethod
+    def go_next(cls):
+        if Node.cur_node == None:
+            return
         if len(Node.cur_node.childs) != 0:
             Node.cur_node = Node.cur_node.childs[0]
-    
 
-    @staticmethod
-    def backward():
+    @classmethod
+    def go_prev(cls):
+        if Node.cur_node == None:
+            return
         if Node.cur_node.parent != None:
             Node.cur_node = Node.cur_node.parent
 
@@ -50,9 +71,9 @@ if __name__ == "__main__":
 
     Node.cur_node = a
     print Node.cur_node
-    Node.forward()
+    Node.go_next()
     print Node.cur_node
-    Node.backward()
+    Node.go_prev()
     print Node.cur_node
     pass
 
