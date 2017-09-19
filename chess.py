@@ -1,14 +1,19 @@
-# Model class
-# Chess View
+# Chess
+# implements traditional chess
+# also supports basic PGN encoding and decoding
 
 import os
 import copy
 import traceback
 
-# Constants
-Blk=0
-Wht=1
+from node import Node
 
+# Constants
+BLK=0
+WHT=1
+
+# Chess pieces
+PIECES = ["rnbqkp","RNBQKP"]
 R = 0
 N = 1
 B = 2
@@ -16,17 +21,15 @@ Q = 3
 K = 4
 P = 5
 
-# Represent castling rights of Position.info
+# Castling rights masks used in Position.info (Future)
 CASTLE_BQ = 1 << 0
 CASTLE_BK = 1 << 1
 CASTLE_WQ = 1 << 2
 CASTLE_WK = 1 << 3
 REQ_UPDATE = 1 << 4  # set if update if needed
 
-UNCETAIN=-1
-    
-
-MASK_TURN = 1 << 0  # if this bit is set it is white's turn
+# Move info masks used in Move.info
+MASK_TURN = 1 << 0      # set if it is white's turn
 MASK_P = 1 << 1
 MASK_N = 1 << 2
 MASK_B = 1 << 3
@@ -34,35 +37,31 @@ MASK_R = 1 << 4
 MASK_Q = 1 << 5
 MASK_K = 1 << 6
 MASK_EP = 1 << 7
-
 MASK_CAPTURE_P = 1 << 8
 MASK_CAPTURE_N = 1 << 9
 MASK_CAPTURE_B = 1 << 10
 MASK_CAPTURE_R = 1 << 11
 MASK_CAPTURE_Q = 1 << 12
 MASK_CAPTURE_K = 1 << 13
-MASK_CAPTURE = MASK_CAPTURE_P | MASK_CAPTURE_N | MASK_CAPTURE_B | \
-            MASK_CAPTURE_R | MASK_CAPTURE_Q | MASK_CAPTURE_K
-
+MASK_CAPTURE = MASK_CAPTURE_P | MASK_CAPTURE_N | \
+        MASK_CAPTURE_B | MASK_CAPTURE_R | \
+        MASK_CAPTURE_Q | MASK_CAPTURE_K
 MASK_CASTLE_SHORT = 1 << 14
 MASK_CASTLE_LONG = 1 << 15
 MASK_CASTLE = MASK_CASTLE_SHORT | MASK_CASTLE_LONG
-
 MASK_PROMOTE_N = 1 << 16
 MASK_PROMOTE_B = 1 << 17
 MASK_PROMOTE_R = 1 << 18
 MASK_PROMOTE_Q = 1 << 19
-
 MASK_PROMOTE = MASK_PROMOTE_N | MASK_PROMOTE_B | \
         MASK_PROMOTE_R | MASK_PROMOTE_Q
-
 MASK_EN_PASSANT = 1 << 20
 MASK_CHECKING = 1 << 21
 MASK_CHECKMATING = 1 <<22
 
 # Methods to build commonly used maps
-# Returns directional rays of 64 squares
 def directional_rays():
+    """ build directional rays corresponding to each square  """
     rays = []           # Three dimensional lists of directional rays.
     for sq in range(64):
         rays.append([
@@ -77,15 +76,15 @@ def directional_rays():
         ])
     return rays
 
-# Returns pawn attack maps of 64 squares
 def pawn_attack_maps():
-    # Create black pawn attack map then rotate 180deg to make white's attack
+    """ build pawn attack maps.  """
     bp_atk = [[] for _ in range(64)]
     for sq in range(8, 64-8):
         if sq%8 != 0:
             bp_atk[sq].append(sq + 7)
         if sq%8 != 7:
             bp_atk[sq].append(sq + 9)
+    # Map for white is created by rotating black's
     wp_atk=[]
     for i in bp_atk:
         wp_atk.append(map(lambda x:63-x, i))
@@ -93,10 +92,10 @@ def pawn_attack_maps():
     return [bp_atk, wp_atk]
 
 def knight_maps():
-    """ Returns knight attack maps corresponding 64 squares. """
+    """ Knight attack maps. """
     n_maps = [] 
-    n_map_r = [-16+1,-8+2,8+2,16+1]     # Right side knight attack map
-    n_map_l = map(lambda x:-x,n_map_r)  # Left side kngiht attack map
+    n_map_r = [-15, -6, 10, 17]     # Right side knight attack map
+    n_map_l = map(lambda x: -x, n_map_r)  # Left side kngiht attack map
     cnt =0
     for sq in range(64):
         rl = map(lambda x: x+sq, n_map_r)
@@ -109,20 +108,31 @@ def knight_maps():
     return n_maps
 
 class Move:
-    """ this is extended move class. Normally simple move is presented by list of two number (source,destination)""" 
-    def __init__(self,src,dst):
+    """ Extended move class. simple move is presented as (src,dst) 
+        Move class has all the information needed from outer world, which is 
+        1. number (full move)
+        2. color (B/W)
+        3. source square
+        4. destination square
+        5. PGN Notation (either it is built or not)
+        6. En Passant,Capture,Promotion,Check,Checkmate status (info field)
+    """
+
+    def __init__(self, src_sq, dst_sq):
         self.number = 0
-        self.src = src
-        self.dst = dst
+        self.src = src_sq
+        self.dst = dst_sq
         self.pgn = ""
         self.info = 0L
         self.comment = ""
         pass
     
-    def set_turn(self,is_white):
+    def set_turn(self, is_white):
         if is_white:
             self.info |= MASK_TURN
-    
+        else:
+            self.info &= ~MASK_TURN
+
     def set_captured_piece(self,cap_piece):
         if cap_piece == 'P':
             self.info |= MASK_CAPTURE_P
@@ -141,6 +151,21 @@ class Move:
             #print "wrong capture:"+str(self.src)+"-"+str(self.dst)+":"+cap_piece
             #traceback.print_exc(file=sys.stdout)
 
+    def get_captured_piece(self):
+        if self.info & MASK_CAPTURE_P:
+            return 'P'
+        elif self.info & MASK_CAPTURE_N:
+            return 'N'
+        elif self.info & MASK_CAPTURE_B:
+            return 'B'
+        elif self.info & MASK_CAPTURE_R:
+            return 'R'
+        elif self.info & MASK_CAPTURE_Q:
+            return 'Q'
+        elif self.info & MASK_CAPTURE_K:
+            return 'K'
+        else:
+            pass
 
     def set_castling(self,is_short):
         if is_short:
@@ -172,7 +197,7 @@ class Move:
 
     def set_en_passant(self):
         self.info |= MASK_EN_PASSANT
-        self.info |= MASK_CAPTURE_P
+        #self.info |= MASK_CAPTURE_P
 
     def set_checking(self):
         self.info |= MASK_CHECKING
@@ -181,10 +206,7 @@ class Move:
         self.info |= MASK_CHECKMATING    
     
     def is_white(self):
-        return (self.info & MASK_TURN != 0)
-
-    def is_black(self):
-        return (self.info % MASK_TURN == 0)
+        return (self.info & MASK_TURN)
 
     def is_capture(self):
         return (self.info & MASK_CAPTURE != 0)
@@ -257,13 +279,13 @@ class Position:
             self.crights000=[0, 0]
             for c in fs[2]:
                 if c == "K":
-                    self.crights00[Wht] = 1
+                    self.crights00[WHT] = 1
                 elif c == "Q":
-                    self.crights000[Wht] = 1
+                    self.crights000[WHT] = 1
                 elif c == "k":
-                    self.crights00[Blk] = 1
+                    self.crights00[BLK] = 1
                 elif c == "q":
-                    self.crights000[Blk] = 1
+                    self.crights000[BLK] = 1
             
             if len(fs[3])==2:
                 self.ep_sq = int(fs[3][1])*8+(ord(fs[3][0])-ord("a"))
@@ -325,7 +347,7 @@ class Position:
             foe_attk |= 1L << atk[1]
 
         # Add castling moves
-        all_occ = self.occ[Blk] | self.occ[Wht]
+        all_occ = self.occ[BLK] | self.occ[WHT]
         king_sqs=[4,60]
         if self.crights00[self.t] \
             and not (all_occ & (1L<<king_sqs[self.t]+1| 
@@ -362,7 +384,7 @@ class Position:
         return True
 
 #   def king_in_check(self,k_color):
-#       king_c = "k" if k_color==Blk else "K"
+#       king_c = "k" if k_color==BLK else "K"
 #       king_sq = "".join(self.pos).find(king_c)
 #       if king_sq == -1: 
 #           return False
@@ -392,9 +414,9 @@ class Position:
 #       print "move:"+str(src) + "-" + str(dst)
 
         if src_p.islower():
-            move.set_turn(Blk)  #  0 is black 1 is white
+            move.set_turn(False)  #  0 is black 1 is white
         else:
-            move.set_turn(Wht)
+            move.set_turn(True)
 
         # En passant capture
         if src_p == "p" and dst == self.ep_sq:
@@ -419,50 +441,58 @@ class Position:
             self.pos[0]=" "
             self.pos[3]="r"
             move.set_castling(False)  # false: long castling  true: short castling
-            self.crights000[Blk] = False
+            self.crights000[BLK] = False
         elif src_p == "k" and src ==4 and dst == 6:
             self.pos[7] = " "
             self.pos[5] = "r"
             move.set_castling(True)
-            self.crights00[Blk] = False
+            self.crights00[BLK] = False
         elif src_p == "K" and src==60 and dst == 58:
             self.pos[56] = " "
             self.pos[59] = "R"
             move.set_castling(False)
-            self.crights000[Wht] = False
+            self.crights000[WHT] = False
         elif src_p == "K" and src==60 and dst == 62:
             self.pos[63] = " "
             self.pos[61] = "R"
             move.set_castling(True)
-            self.crights00[Wht] = False
+            self.crights00[WHT] = False
 
         # If king or rook moves void castling rights
         if src_p == "k":
-            self.crights000[Blk] = False
-            self.crights00[Blk] = False
+            self.crights000[BLK] = False
+            self.crights00[BLK] = False
         elif src_p == "K":
-            self.crights000[Wht] = False
-            self.crights00[Wht] = False
-        if  src_p == "r" and src == 0 and self.crights000[Blk]:
-            self.crights000[Blk] = False
-        elif src_p == "r" and src == 7 and self.crights00[Blk]:
-            self.crights00[Blk] = False
-        if  src_p == "R" and src == 56 and self.crights000[Wht]:
-            self.crights000[Wht] = False
-        elif src_p == "R" and src == 63 and self.crights00[Wht]:
-            self.crights00[Wht] = False
+            self.crights000[WHT] = False
+            self.crights00[WHT] = False
+        if  src_p == "r" and src == 0 and self.crights000[BLK]:
+            self.crights000[BLK] = False
+        elif src_p == "r" and src == 7 and self.crights00[BLK]:
+            self.crights00[BLK] = False
+        if  src_p == "R" and src == 56 and self.crights000[WHT]:
+            self.crights000[WHT] = False
+        elif src_p == "R" and src == 63 and self.crights00[WHT]:
+            self.crights00[WHT] = False
 
         # Promotion
         if (src_p == "p" and dst//8 == 7) or \
                 (src_p == "P" and dst//8 == 0) :
             try:
-                self.pos[dst] = self.on_ask_promotion(src_p == "P")
+                if len(mv) > 2:
+                    self.pos[dst] = mv[2]
+                else:
+                    self.pos[dst] = 'q'
+                if src_p == "P": 
+                    self.pos[dst] = self.pos[dst].upper()
+                else:
+                    self.pos[dst] = self.pos[dst].lower()
+#               self.pos[dst] = self.on_ask_promotion(src_p == "P")
             except AttributeError:
                 self.pos[dst] = "q"
                 if src_p == "P": self.pos[dst] = "Q"
             move.set_promotion_piece(self.pos[dst].upper())
-
-        if self.t==Blk:
+            #print "promote:"+self.pos[dst]
+        if self.t==BLK:
             self.move_number += 1
         self.t ^= 1                 # Toggle color
         self.occ[0] = -1            # Invalidate occupied maps to recalculate
@@ -475,19 +505,18 @@ class Position:
 
         # calculate occupied map """
         if self.occ[0] == -1:
-            self.occ[Blk]=0L
-            self.occ[Wht]=0L
+            self.occ[BLK]=0L
+            self.occ[WHT]=0L
             # first assume black's move then swap if it's white's
             for piece in enumerate(self.pos):
                 if piece[1] in "rnbqkp":
-                    self.occ[Blk] |= 1 << piece[0]
+                    self.occ[BLK] |= 1 << piece[0]
                 elif piece[1] in "RNBQKP":
-                    self.occ[Wht] |= 1 << piece[0]
+                    self.occ[WHT] |= 1 << piece[0]
        
-        pieces = ["rnbqkp","RNBQKP"]
-        all_occ = self.occ[Blk] | self.occ[Wht]
+        all_occ = self.occ[BLK] | self.occ[WHT]
         for p in enumerate(self.pos):
-            if p[1] == pieces[side][R]:
+            if p[1] == PIECES[side][R]:
                 for i in range(0,8,2):  # east,south,west,north
                     for sq in Position.rays[p[0]][i]:
                         if all_occ & 1 << sq == 0:
@@ -497,7 +526,7 @@ class Position:
                             break
                         else:
                             break
-            elif p[1] == pieces[side][B]:
+            elif p[1] == PIECES[side][B]:
                 for i in range(1,8,2):  
                     for sq in Position.rays[p[0]][i]:
                         if all_occ & 1 << sq == 0:
@@ -507,7 +536,7 @@ class Position:
                             break
                         else:
                             break
-            elif p[1] == pieces[side][Q]:
+            elif p[1] == PIECES[side][Q]:
                 for i in range(8):  
                     for sq in Position.rays[p[0]][i]:
                         if all_occ & 1 << sq == 0:
@@ -517,7 +546,7 @@ class Position:
                             break
                         else:
                             break
-            elif p[1] == pieces[side][K]:
+            elif p[1] == PIECES[side][K]:
                 for i in range(8):
                     sqs = Position.rays[p[0]][i]
                     if len(sqs)==0:
@@ -527,20 +556,19 @@ class Position:
                         mvs.append((p[0], sq))
                     elif self.occ[side^1] & 1 << sq != 0:
                         mvs.append((p[0], sq))
-            elif p[1] == pieces[side][N]:
+            elif p[1] == PIECES[side][N]:
                 for sq in Position.n_maps[p[0]]:
                     if all_occ & 1 << sq == 0:
                         mvs.append((p[0], sq))
                     elif self.occ[side^1] & 1 << sq != 0:
                         mvs.append((p[0], sq))
-            elif p[1] == pieces[side][P]:
-                dir=-1
-                if side==Blk: dir=1;                      # Set pawn move direction.
-                dsq = p[0]+8*dir
+            elif p[1] == PIECES[side][P]:
+                dir = 1 if side == BLK else -1  # pawn move direction
+                dsq = p[0] + 8 * dir
                 if all_occ & 1 << dsq == 0:
                     mvs.append((p[0], dsq))
-                    if (p[0]/8 == 1 and side == Blk) or \
-                            (p[0]/8 == 6 and side == Wht): # Check if pawn hasn't moved
+                    if (p[0]/8 == 1 and side == BLK) or \
+                            (p[0]/8 == 6 and side == WHT): # Check if pawn hasn't moved
                         dsq += 8*dir
                         if all_occ & 1 << dsq == 0:
                             mvs.append((p[0], dsq))
@@ -551,25 +579,24 @@ class Position:
         return mvs            
     
 
-class Node:
-    def __init__(self, pos = None):
-        self.pos = pos
-        return
-
 class Chess:
     """ Manages tree of positions """
     def __init__(self):
-        self.nodes = []
-        self.idx= -1
+#       self.nodes = []
+#       self.idx= -1
+        Node.clear()
         return
 
     # Initialize data as default chess model
     def setup(self,fen = None):
-        del self.nodes[:]
-        self.idx = 0
+#       del self.nodes[:]
+#       self.idx = 0
+
+        Node.clear()
 
         p = Position(fen)
-        self.nodes.append(Node(p))
+        Node.append(Node(p))
+#       self.nodes.append(Node(p))
 
         try:
             self.on_setup(p.pos)
@@ -578,66 +605,63 @@ class Chess:
         return
 
     def get_position(self):
-        return self.nodes[self.idx].pos
+#       return self.nodes[self.idx].pos
+        return Node.cur_node.data
 
     def first(self):
-        if self.idx > 0:
-            self.idx = 0
-            try:
-                self.on_nav(self.nodes[self.idx].pos.pos)
+        while Node.cur_node.parent != None:
+            n = Node.cur_node
+            Node.go_prev()
+            try: 
+                self.on_unmake(n.data.last_move)
             except AttributeError:
                 pass
-        return
-
+    
     def last(self):
-        if self.idx > 0:
-            self.idx = len(self.nodes)-1
-            try:
-                self.on_nav(self.nodes[self.idx].pos.pos)
+        while len(Node.cur_node.childs) != 0:
+            Node.go_next()
+            try: 
+                self.on_make(Node.cur_node.data.last_move)
             except AttributeError:
                 pass
-        return
 
     def prev(self):
-        print "prev button"
-        if self.idx > 0:
-            self.idx -= 1
-            try:
-                self.on_nav(self.nodes[self.idx].pos.pos)
-            except AttributeError:
-                pass
-        return
+        if Node.cur_node.parent == None:
+            return
+        n = Node.cur_node
+        Node.go_prev()
+        try: 
+            self.on_unmake(n.data.last_move)
+        except AttributeError:
+            pass
 
     def next(self):
-        if self.idx < len(self.nodes)-1:
-            self.idx += 1
-            try:
-                self.on_nav(self.nodes[self.idx].pos.pos)
-            except AttributeError:
-                pass
-        return
+        if len(Node.cur_node.childs)==0:
+            return
+        Node.go_next()
+        try: 
+            self.on_make(Node.cur_node.data.last_move)
+        except AttributeError:
+            pass
 
     def make(self, move):
-        pos = self.nodes[self.idx].pos
+        pos = Node.cur_node.data #self.nodes[self.idx].pos
         legal_moves = pos.get_legal_moves()
-
 
         for m in legal_moves:
             if m[0] == move[0] and m[1] == move[1]:
                 next_position = copy.deepcopy(pos)
-                last_move = next_position.move(m)
-
+                last_move = next_position.move(move)
 
                 encode_pgn(pos,legal_moves,next_position,last_move)    
                 # Truncate moves
-                while len(self.nodes) > self.idx+1:
-                    del self.nodes[-1]
-
+#               while len(self.nodes) > self.idx+1:
+#                   del self.nodes[-1]
 
                 next_position.last_move = last_move
                  
-                self.nodes.append(Node(next_position))
-                self.idx += 1
+                Node.append(Node(next_position))
+#               self.idx += 1
 
                 try:
                     self.on_make(last_move)
@@ -645,8 +669,6 @@ class Chess:
                     pass
                 return True
         return False
-
-
 
 def encode_pgn(pos,lmvs,new_pos,move):
     # encode pgn 
@@ -712,9 +734,6 @@ def encode_pgn(pos,lmvs,new_pos,move):
         else:
             move.set_checking()
             move.pgn += '+'
-        
-#   print "encode:"+str(move.number)+(". " if move.is_white() else "... ") +move.pgn
-
        
 # Test unit
 def print_coords():

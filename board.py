@@ -6,6 +6,8 @@ from PIL import Image,ImageTk
 import Tkinter as tk
 import tkFileDialog
 
+from node import Node
+
 padding = 2 # distance from edge of the time to edge of piece
 
 oldx = -1
@@ -27,8 +29,11 @@ class App(tk.Frame):
         self.prev_game_btn = tk.Button(text="prev",command=self.prev_game)
         self.next_game_btn = tk.Button(text="next",command=self.next_game)
         
-        self.revert_btn = tk.Button(text="Revert",command=self.revert)
-        self.quit_btn = tk.Button(text="Quit",command=self.quit)
+        self.vars_list = tk.Listbox(master, width = 15, height = 5)
+        self.vars_list.bind('<<ListboxSelect>>', self.on_vars_list_select)
+        self.del_var_btn = tk.Button(text="Del var",command=self.del_var)
+        
+#       self.quit_btn = tk.Button(text="Quit",command=self.quit)
  #      self.prev_btn.grid(row = 1, column = 0)
  #      self.next_btn.grid(row = 1, column = 1)
  #      self.quit_btn.grid(row = 1, column = 2)
@@ -38,8 +43,10 @@ class App(tk.Frame):
         self.last_btn.pack(side=tk.LEFT)
         self.prev_game_btn.pack(side=tk.LEFT)
         self.next_game_btn.pack(side=tk.LEFT)
-        self.revert_btn.pack(side=tk.LEFT)
-        self.quit_btn.pack(side=tk.LEFT)
+        self.vars_list.pack(side=tk.LEFT)
+        self.del_var_btn.pack(side=tk.LEFT)
+        
+#       self.quit_btn.pack(side=tk.LEFT)
         
         mb = tk.Menu(self.master)
         self.master.config(menu=mb)
@@ -57,6 +64,12 @@ class App(tk.Frame):
 #       self.bind("<Key>", self.key_press)        
         self.rotate = False
 
+    def on_vars_list_select(self,e):
+        w = e.widget
+        s = w.curselection()
+        if len(s)>0:
+            Node.cur_node.next_index = int(s[0])
+
     def open_pgn(self):
         self.opt = opt = {}
         opt["defaultextension"] = ".pgn"
@@ -64,7 +77,6 @@ class App(tk.Frame):
         opt['parent'] = 'root'
         opt['title'] = 'Choose PGN file'
         path = tkFileDialog.askopenfilename()
-        
         self.on_open_pgn(path)
         pass
 
@@ -78,7 +90,6 @@ class App(tk.Frame):
         if self.rotate:
             sq = 63-sq
         return ((sq % 8) * sq_size,(sq // 8) * sq_size)
-
         
     def read_piece_image(self,pc, darker):
         path = "Data/PIECE/Dyche/"
@@ -144,15 +155,12 @@ class App(tk.Frame):
     def mouse_release(self,event):
         """ Called when mouse is released,
         Stop dragging piece and ask if the move is legal
-        move actually if the move is legal
         """
         global drag_sq
         if drag_sq != -1:
 #           dst_sq = (event.y // sq_size) * 8+ (event.x // sq_size)
             dst_sq = self.coord_to_sq((event.x, event.y))
-            if self.on_move_piece((drag_sq, dst_sq)):
-                self.move((drag_sq,dst_sq))        
-            else:
+            if not self.on_move_piece((drag_sq, dst_sq)):
                 # Withdraw the piece to original spot
                 print "not legal move"
                 obj = self.piece_objs[drag_sq]
@@ -220,21 +228,26 @@ class App(tk.Frame):
     def put(self,sq,p):         # Simply put piece on a square
         if p==" ": return
         xy = self.sq_to_coord(sq)
-        self.piece_objs[sq] = self.canvas.create_image(
+        try:
+            self.piece_objs[sq] = self.canvas.create_image(
                 xy[0],
                 xy[1],
                 anchor=tk.NW, 
                 image=self.canvas.pc_imgs[p])
+        except KeyError:
+            print "doesn't have piece image:"+p
 
     def remove(self,sq):
         if sq < 0 or sq >= 64: return
-        if sq in self.piece_objs:
-            self.canvas.delete(self.piece_objs[sq])
-            del self.piece_objs[sq]
-
+        try:
+            if sq in self.piece_objs:
+                self.canvas.delete(self.piece_objs[sq])
+                del self.piece_objs[sq]
+        except KeyError:
+            print "probably wrong square at remove point"
     # Public interfaces
     # pos_str can be either FEN or raw position data
-    def setup(self,pos_str):
+    def setup(self,pos):
         # Remove images from board
 #       for val in self.piece_objs:
 #           self.canvas.delete(val)
@@ -245,7 +258,7 @@ class App(tk.Frame):
             self.remove(sq)
 
         sq=0
-        for p in pos_str:
+        for p in pos.pos:
             if "12345678".find(p) != -1:
                 c = int(p)
                 sq += c
@@ -254,47 +267,105 @@ class App(tk.Frame):
                 sq += 1
             elif p == " ":
                 sq += 1
+        self.update_vars_list()
+
 
     def move(self,move):
         src = move[0]
         dst = move[1]
         if src < 0 or dst < 0: return
-
-        # Delete captured if exists
-        self.remove(dst)
-
-        # Move
+        if not src in  self.piece_objs:
+#           print "wrong move" + str(src) + "-" + str(dst)
+            return
+        # Change coordinate to destination
         self.canvas.coords(self.piece_objs[src],
                 self.sq_to_coord(dst))
-#               ((dst % 8) * sq_size,(dst // 8) * sq_size))
+        # Update dictinary
         self.piece_objs[dst] = self.piece_objs[src]
         del self.piece_objs[src]
-        print "board:move"
 
-    # Post process after make move
-    # Note that this method is called before board:move
     def handle_make(self, move):
-        # Delete enpassant capture
+        """ Post process after actually model has changed """
+#       print "handle make-"+str(move.src)+":"+str(move.dst)
+        if not move: return
+        # remove en passant capture
         if move.is_en_passant():
             self.remove(move.dst + (8 if move.is_white() else -8))
-        elif move.is_short_castling() and move.is_white():
-            self.move((63,61))
-        elif move.is_long_castling() and move.is_white():
-            self.move((56, 59))
-        elif move.is_short_castling() and move.is_black():
-            self.move((7, 5))
-        elif move.is_long_castling() and move.is_black():
-            self.move((0, 3))
-        elif move.is_promotion():
-            # replace srs_sq piece (since piece hsn't moved yet we use source square)
+        if move.is_capture():
+            self.remove(move.dst)
+
+        # move rook when castling
+        if move.is_castling_short():
+            if move.is_white():
+                self.move((63,61))
+            else:
+                self.move((7,5))
+        if move.is_castling_long():
+            if move.is_white():
+                self.move((56, 59))
+            else:
+                self.move((0, 3))
+        # Actual move itself.
+        self.move((move.src, move.dst))
+
+        # Replace promoted piece.
+        if move.is_promotion():
+            self.remove(move.dst)
+            p_piece = move.get_promotion_piece()
+            if not move.is_white(): p_piece = p_piece.lower()
+#           print "promoting to "+p_piece+" at "+move.dst
+            self.put(move.dst, p_piece)
+        self.update_vars_list() 
+        
+    def handle_unmake(self, move):
+        """ Post process after actually model has changed """
+#       print "board:handle_make pgn = " + move.pgn
+        if not move: return
+        # remove en passant capture
+        if move.is_en_passant():
+            self.put(move.dst + (8 if move.is_white() else -8), \
+                'p' if move.is_white() else 'P')
+
+        # move rook when castling
+        if move.is_castling_short():
+            if move.is_white():
+                self.move((61,63))
+            else:
+                self.move((5,7))
+        if move.is_castling_long():
+            if move.is_white():
+                self.move((59, 56))
+            else:
+                self.move((3, 0))
+
+        # now move itself
+        self.move((move.dst, move.src))
+        
+        # recover capture
+        if move.is_capture():
+            p = move.get_captured_piece()
+            if move.is_white(): p = p.lower()
+            self.put(move.dst, p)
+
+        # Recover promoted piece
+        if move.is_promotion():
             self.remove(move.src)
-            pc = move.get_promotion_piece()
-            if move.is_black():
-                pc = pc.lower()
-            self.put(move.src,pc)
-#       print "board:handle_make ", mtype
+            self.put(move.src, 'P' if move.is_white() else 'p')
+        self.update_vars_list() 
     
+    def update_vars_list(self):
+        self.vars_list.delete(0, tk.END)
+        if Node.cur_node == None:
+            return
+        for n in Node.cur_node.childs:
+            s = str(n.data.last_move.number) 
+            s += ". " if n.data.last_move.is_white() else "... "
+            s += n.data.last_move.pgn
+            self.vars_list.insert(tk.END, s)
+#       print "var num:"+str(len(Node.cur_node.childs))
+
     def ask_promotion(self,side):
+        print "returning Q"
         if side==1: return "Q"
         return "q"
 
@@ -307,9 +378,13 @@ class App(tk.Frame):
                         self.sq_to_coord(dst))
         self.rotate = not self.rotate
 
-    def revert(self):
-        print "revert"
-
+    def del_var(self):
+        """ delete current variation """
+#       print "board:move"
+        while Node.cur_node.parent != None:
+            self.prev()
+            if len(Node.cur_node.childs) > 1:
+                break
 
 if __name__ == "__main__":
     app = App(tk.Tk())

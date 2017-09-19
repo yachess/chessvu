@@ -5,6 +5,7 @@ class Node:
         self.parent = None
         self.childs = []
         self.data = dat
+        self.next_index = 0
 
     def is_leaf(self):
         return len(self.childs) == 0
@@ -40,7 +41,7 @@ class Node:
         if Node.cur_node == None:
             return
         if len(Node.cur_node.childs) != 0:
-            Node.cur_node = Node.cur_node.childs[0]
+            Node.cur_node = Node.cur_node.childs[Node.cur_node.next_index]
 
     @classmethod
     def go_prev(cls):
