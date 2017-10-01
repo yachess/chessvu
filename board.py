@@ -1,53 +1,94 @@
 # board.py
 # Graphical representation of chess board
 
-
 from PIL import Image,ImageTk
 import Tkinter as tk
 import tkFileDialog
 
 from node import Node
-
+from chess import Move
+from chess import PGN
 padding = 2 # distance from edge of the time to edge of piece
 
 oldx = -1
 oldy = -1
 drag_sq = -1
 
+"""
+class PGN:
+    lvl = 0
+    new_context = True
+    @staticmethod
+
+    def init():
+        lvl = 0
+        new_context = True
+
+    @staticmethod
+    def encode_node(node):
+        if node == None:
+            return ""
+        s = ""
+        for i,v in enumerate(node.childs, 1):
+            if i != 1:
+                s += "("
+                PGN.new_context = True
+                PGN.lvl += 1
+            if PGN.new_context or v.data.last_move.is_white(): 
+                s += str(v.data.last_move.number)
+                s += ". " if v.data.last_move.is_white() else "... "
+            s += v.data.last_move.pgn
+            if len(v.childs) > 0:           # last move doesn't need space
+                s += " "
+            PGN.new_context = False
+        for n in reversed(node.childs):
+            s += PGN.encode_node(n)
+        if len(node.childs) == 0:
+            if PGN.lvl > 0 :
+                s += ") "
+            PGN.new_context = True
+            PGN.lvl -= 1
+        return s
+"""
+
 class App(tk.Frame):
     def __init__(self, master=None):
         tk.Frame.__init__(self,master)
-        self.pack()
-        self.master.geometry("%dx%d"%(sq_size*8+2, sq_size*8+20))
-        self.canvas = tk.Canvas(self, width=sq_size*8, height=sq_size*8)
-        self.create_widgets()
+        self.master.grid_rowconfigure(0, weight=1)
+        self.master.grid_rowconfigure(3, weight=1)
        
-        self.first_btn = tk.Button(text="|<",command=self.first)
-        self.last_btn = tk.Button(text=">|",command=self.last) 
-        self.prev_btn = tk.Button(text="<",command=self.prev)
-        self.next_btn = tk.Button(text=">", command=self.next)
+        self.master.grid_columnconfigure(0, weight=1)
+        self.master.grid_columnconfigure(1, weight=2)
+        self.master.grid_columnconfigure(2, weight=3)
+        self.master.grid_columnconfigure(3, weight=4)
+
+        self.canvas = tk.Canvas(self.master, width=sq_size*8, height=sq_size*8)
+        self.create_widgets()
+        self.canvas.pack()
+       
+        self.first_btn = tk.Button(text="|<",command=self.first,width = 15)
+        self.last_btn = tk.Button(text=">|",command=self.last,width = 15) 
+        self.prev_btn = tk.Button(text="<",command=self.prev,width = 15)
+        self.next_btn = tk.Button(text=">", command=self.next,width = 15)
         self.prev_game_btn = tk.Button(text="prev",command=self.prev_game)
         self.next_game_btn = tk.Button(text="next",command=self.next_game)
         
         self.vars_list = tk.Listbox(master, width = 15, height = 5)
         self.vars_list.bind('<<ListboxSelect>>', self.on_vars_list_select)
         self.del_var_btn = tk.Button(text="Del var",command=self.del_var)
-        
-#       self.quit_btn = tk.Button(text="Quit",command=self.quit)
- #      self.prev_btn.grid(row = 1, column = 0)
- #      self.next_btn.grid(row = 1, column = 1)
- #      self.quit_btn.grid(row = 1, column = 2)
-        self.first_btn.pack(side=tk.LEFT)
-        self.prev_btn.pack(side=tk.LEFT)
-        self.next_btn.pack(side=tk.LEFT)
-        self.last_btn.pack(side=tk.LEFT)
-        self.prev_game_btn.pack(side=tk.LEFT)
-        self.next_game_btn.pack(side=tk.LEFT)
-        self.vars_list.pack(side=tk.LEFT)
-        self.del_var_btn.pack(side=tk.LEFT)
-        
-#       self.quit_btn.pack(side=tk.LEFT)
-        
+        self.comment_tbox = tk.Text(width = 30, height =18)       
+        self.canvas.grid(column=0,row=0,rowspan=3,columnspan=4)
+
+        self.first_btn.grid(row=3, column=0, padx = 1, pady = 1)
+        self.prev_btn.grid(row=3, column=1, padx = 1, pady = 1)
+        self.next_btn.grid(row=3, column=2, padx = 1, pady = 1)
+        self.last_btn.grid(row=3, column=3, padx = 1, pady = 1)
+        self.prev_game_btn.grid(row=3, column=4)
+        self.next_game_btn.grid(row=3, column=5)
+        self.vars_list.grid(row=0, columnspan=2, column=4)
+        self.comment_tbox.grid(row=2, columnspan=2, column=4)
+        self.del_var_btn.grid(row=1, column=4)
+
         mb = tk.Menu(self.master)
         self.master.config(menu=mb)
     
@@ -56,6 +97,11 @@ class App(tk.Frame):
         filemenu.add_command(label = "Quit",command = self.quit)
         mb.add_cascade(label="File",menu = filemenu)
 
+        editmenu = tk.Menu(mb)
+        editmenu.add_command(label = "Copy position",command = self.copy_position)
+        editmenu.add_command(label = "Copy game", command = self.copy_game)
+        mb.add_cascade(label="Edit",menu = editmenu)
+    
         self.piece_objs = {}    # Canvas object indices of.piece_objs 
         
         self.canvas.bind("<Button-1>", self.mouse_click)
@@ -78,6 +124,21 @@ class App(tk.Frame):
         opt['title'] = 'Choose PGN file'
         path = tkFileDialog.askopenfilename()
         self.on_open_pgn(path)
+        pass
+    
+    def copy_position(self):
+        pass
+
+    def copy_game(self):
+        save_node = Node.cur_node
+        n = Node.cur_node
+        while n.parent != None:
+            n = n.parent
+        PGN.init_encode()
+        s = PGN.encode_node(n)
+        
+        print s
+        Node.cur_node = save_node
         pass
 
     def coord_to_sq(self,coord):
@@ -138,7 +199,7 @@ class App(tk.Frame):
             pc_imgs[pn.lower()] = self.read_piece_image(pn, True)
       
         self.canvas.pc_imgs = pc_imgs
-        self.canvas.pack()
+#       self.canvas.pack()
 
     def mouse_click(self,event):
         """ Called when user mouse click,
@@ -160,9 +221,12 @@ class App(tk.Frame):
         if drag_sq != -1:
 #           dst_sq = (event.y // sq_size) * 8+ (event.x // sq_size)
             dst_sq = self.coord_to_sq((event.x, event.y))
-            if not self.on_move_piece((drag_sq, dst_sq)):
+            
+            m = Move(drag_sq, dst_sq)
+            m.set_from_user()  # this is input from user (not file)
+        
+            if not self.on_move_piece(m):
                 # Withdraw the piece to original spot
-                print "not legal move"
                 obj = self.piece_objs[drag_sq]
                 
                 self.canvas.coords(obj, 
@@ -245,15 +309,9 @@ class App(tk.Frame):
                 del self.piece_objs[sq]
         except KeyError:
             print "probably wrong square at remove point"
-    # Public interfaces
-    # pos_str can be either FEN or raw position data
+    
     def setup(self,pos):
         # Remove images from board
-#       for val in self.piece_objs:
-#           self.canvas.delete(val)
-#       # Clear the data
-#       self.piece_objs.clear()
-    
         for sq in range(64):
             self.remove(sq)
 
@@ -268,7 +326,6 @@ class App(tk.Frame):
             elif p == " ":
                 sq += 1
         self.update_vars_list()
-
 
     def move(self,move):
         src = move[0]

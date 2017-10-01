@@ -27,7 +27,6 @@ class Node:
 
     @classmethod
     def remove(cls):
-        
         node = Node.cur_node 
         Node.cur_node = Node.cur_node.parent
         
