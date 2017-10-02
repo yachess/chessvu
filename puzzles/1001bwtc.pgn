@@ -459,7 +459,7 @@
 
 [FEN "2r1k1qr/ppp5/2n1p1pp/1NQ3B1/2p2R2/8/PP3PPP/3R2K1 w k - 0 1"]
 
-1. Nxc7+ Qxc6+
+1. Nxc7+ Rxc7 2. Qxc6+
 *
 
 [Event "1001 Brilliant Mates"]
